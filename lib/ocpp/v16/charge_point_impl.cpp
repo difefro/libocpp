@@ -19,7 +19,6 @@ const auto OCSP_REQUEST_TIMER_INTERVAL = std::chrono::hours(12);
 const auto INITIAL_CERTIFICATE_REQUESTS_DELAY = std::chrono::seconds(60);
 const auto WEBSOCKET_INIT_DELAY = std::chrono::seconds(2);
 const auto DEFAULT_MESSAGE_QUEUE_SIZE_THRESHOLD = 2E5;
-const auto DEFAULT_BOOT_NOTIFICATION_INTERVAL_S = 60; // fallback interval if BootNotification returns interval of 0.
 
 ChargePointImpl::ChargePointImpl(const std::string& config, const fs::path& share_path,
                                  const fs::path& user_config_path, const fs::path& database_path,
@@ -242,8 +241,7 @@ WebsocketConnectionOptions ChargePointImpl::get_ws_connection_options() {
                                                   this->configuration->getAdditionalRootCertificateCheck(),
                                                   this->configuration->getHostName(),
                                                   this->configuration->getVerifyCsmsCommonName(),
-                                                  this->configuration->getUseTPM(),
-                                                  this->configuration->getVerifyCsmsAllowWildcards()};
+                                                  this->configuration->getUseTPM()};
     return connection_options;
 }
 
@@ -992,18 +990,6 @@ void ChargePointImpl::message_callback(const std::string& message) {
             if (this->registration_status == RegistrationStatus::Pending) {
                 if (enhanced_message.messageType == MessageType::BootNotificationResponse) {
                     this->handleBootNotificationResponse(json_message);
-                } else if (enhanced_message.messageType == MessageType::RemoteStartTransaction) {
-                    RemoteStartTransactionResponse response;
-                    response.status = RemoteStartStopStatus::Rejected;
-                    const ocpp::CallResult<RemoteStartTransactionResponse> call_result(response,
-                                                                                       enhanced_message.uniqueId);
-                    this->send<RemoteStartTransactionResponse>(call_result);
-                } else if (enhanced_message.messageType == MessageType::RemoteStopTransaction) {
-                    RemoteStopTransactionResponse response;
-                    response.status = RemoteStartStopStatus::Rejected;
-                    const ocpp::CallResult<RemoteStopTransactionResponse> call_result(response,
-                                                                                      enhanced_message.uniqueId);
-                    this->send<RemoteStopTransactionResponse>(call_result);
                 } else {
                     this->handle_message(enhanced_message);
                 }
@@ -1175,13 +1161,6 @@ void ChargePointImpl::handleBootNotificationResponse(ocpp::CallResult<BootNotifi
     if (call_result.msg.interval > 0) {
         this->configuration->setHeartbeatInterval(call_result.msg.interval);
     }
-
-    // If interval value is zero, the Charge Point chooses a waiting interval on its own
-    auto boot_notification_retry_interval = DEFAULT_BOOT_NOTIFICATION_INTERVAL_S;
-    if (call_result.msg.interval > 0) {
-        boot_notification_retry_interval = call_result.msg.interval;
-    }
-
     switch (call_result.msg.status) {
     case RegistrationStatus::Accepted: {
         this->connection_state = ChargePointConnectionState::Booted;
@@ -1238,7 +1217,7 @@ void ChargePointImpl::handleBootNotificationResponse(ocpp::CallResult<BootNotifi
     case RegistrationStatus::Pending:
         this->connection_state = ChargePointConnectionState::Pending;
         EVLOG_info << "BootNotification response is pending.";
-        this->boot_notification_timer->timeout(std::chrono::seconds(boot_notification_retry_interval));
+        this->boot_notification_timer->timeout(std::chrono::seconds(call_result.msg.interval));
         break;
     default:
         this->connection_state = ChargePointConnectionState::Rejected;
@@ -1248,7 +1227,7 @@ void ChargePointImpl::handleBootNotificationResponse(ocpp::CallResult<BootNotifi
         EVLOG_info << "BootNotification was rejected, trying again in " << this->configuration->getHeartbeatInterval()
                    << "s";
 
-        this->boot_notification_timer->timeout(std::chrono::seconds(boot_notification_retry_interval));
+        this->boot_notification_timer->timeout(std::chrono::seconds(call_result.msg.interval));
 
         break;
     }
@@ -1474,10 +1453,6 @@ void ChargePointImpl::handleChangeConfigurationRequest(ocpp::Call<ChangeConfigur
         response.status == ConfigurationStatus::Accepted) {
         kv.value().value = call.msg.value;
         this->configuration_key_changed_callbacks[call.msg.key](kv.value());
-    } else if (this->generic_configuration_key_changed_callback != nullptr and
-               response.status == ConfigurationStatus::Accepted) {
-        kv.value().value = call.msg.value;
-        this->generic_configuration_key_changed_callback(kv.value());
     }
 }
 
@@ -1801,11 +1776,8 @@ void ChargePointImpl::handleStartTransactionResponse(ocpp::CallResult<StartTrans
             if (this->configuration->getStopTransactionOnInvalidId()) {
                 this->stop_transaction_callback(connector, Reason::DeAuthorized);
             }
-        }
-
-        if (this->transaction_updated_callback != nullptr) {
-            this->transaction_updated_callback(connector, transaction->get_session_id(),
-                                               start_transaction_response.transactionId);
+        } else if (this->transaction_started_callback != nullptr) {
+            this->transaction_started_callback(connector, start_transaction_response.transactionId);
         }
     } else {
         EVLOG_warning << "Received StartTransaction.conf for transaction that is not known to transaction_handler";
@@ -2236,7 +2208,7 @@ void ChargePointImpl::update_ocsp_cache() {
             (last_update.value().to_time_point() + std::chrono::seconds(this->configuration->getOcspRequestInterval()) <
              now.to_time_point())) {
             EVLOG_info << "Requesting OCSP response.";
-            const auto ocsp_request_data = this->evse_security->get_v2g_ocsp_request_data();
+            const auto ocsp_request_data = this->evse_security->get_ocsp_request_data();
             for (const auto& ocsp_request_entry : ocsp_request_data) {
                 ocpp::v201::OCSPRequestData ocsp_request =
                     ocpp::evse_security_conversions::to_ocpp_v201(ocsp_request_entry);
@@ -2378,8 +2350,8 @@ void ChargePointImpl::handleSignedUpdateFirmware(ocpp::Call<SignedUpdateFirmware
     SignedUpdateFirmwareResponse response;
 
     if (this->evse_security->verify_certificate(call.msg.firmware.signingCertificate.get(),
-                                                ocpp::LeafCertificateType::MF) !=
-        ocpp::CertificateValidationResult::Valid) {
+                                                ocpp::CertificateSigningUseEnum::ManufacturerCertificate) !=
+        ocpp::InstallCertificateResult::Accepted) {
         response.status = UpdateFirmwareStatusEnumType::InvalidCertificate;
         ocpp::CallResult<SignedUpdateFirmwareResponse> call_result(response, call.uniqueId);
         this->send<SignedUpdateFirmwareResponse>(call_result);
@@ -3225,10 +3197,6 @@ void ChargePointImpl::start_transaction(std::shared_ptr<Transaction> transaction
     transaction->change_meter_values_sample_interval(this->configuration->getMeterValueSampleInterval());
 
     this->send<StartTransactionRequest>(call);
-
-    if (this->transaction_started_callback != nullptr) {
-        this->transaction_started_callback(transaction->get_connector(), transaction->get_session_id());
-    }
 }
 
 void ChargePointImpl::on_session_started(int32_t connector, const std::string& session_id,
@@ -3370,10 +3338,10 @@ void ChargePointImpl::stop_transaction(int32_t connector, Reason reason, std::op
         req.idTag.emplace(id_tag_end.value());
     }
 
-    const auto transaction_data = this->get_filtered_transaction_data(transaction);
-    if (!transaction_data.empty()) {
-        req.transactionData.emplace(transaction_data);
-    }
+    // const auto transaction_data = this->get_filtered_transaction_data(transaction);
+    // if (!transaction_data.empty()) {
+    //    req.transactionData.emplace(transaction_data);
+    //}
 
     auto message_id = this->message_queue->createMessageId();
     ocpp::Call<StopTransactionRequest> call(req, message_id);
@@ -3381,10 +3349,6 @@ void ChargePointImpl::stop_transaction(int32_t connector, Reason reason, std::op
     {
         std::lock_guard<std::mutex> lock(this->stop_transaction_mutex);
         this->send<StopTransactionRequest>(call);
-    }
-
-    if (this->transaction_stopped_callback != nullptr) {
-        this->transaction_stopped_callback(connector, transaction->get_session_id(), transaction->get_transaction_id());
     }
 
     transaction->set_finished();
@@ -3645,30 +3609,13 @@ void ChargePointImpl::register_get_15118_ev_certificate_response_callback(
 }
 
 void ChargePointImpl::register_transaction_started_callback(
-    const std::function<void(const int32_t connector, const std::string& session_id)>& callback) {
+    const std::function<void(const int32_t connector, const int32_t transaction_id)>& callback) {
     this->transaction_started_callback = callback;
-}
-
-void ChargePointImpl::register_transaction_stopped_callback(
-    const std::function<void(const int32_t connector, const std::string& session_id, const int32_t transaction_id)>
-        callback) {
-    this->transaction_stopped_callback = callback;
-}
-
-void ChargePointImpl::register_transaction_updated_callback(
-    const std::function<void(const int32_t connector, const std::string& session_id, const int32_t transaction_id)>
-        callback) {
-    this->transaction_updated_callback = callback;
 }
 
 void ChargePointImpl::register_configuration_key_changed_callback(
     const CiString<50>& key, const std::function<void(const KeyValue& key_value)>& callback) {
     this->configuration_key_changed_callbacks[key] = callback;
-}
-
-void ChargePointImpl::register_generic_configuration_key_changed_callback(
-    const std::function<void(const KeyValue& key_value)>& callback) {
-    this->generic_configuration_key_changed_callback = callback;
 }
 
 void ChargePointImpl::register_security_event_callback(
