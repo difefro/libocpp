@@ -17,7 +17,9 @@ namespace v16 {
 
 ChargePointConfiguration::ChargePointConfiguration(const std::string& config, const fs::path& ocpp_main_path,
                                                    const fs::path& user_config_path) {
-
+    //
+    // Fro - This part might be redundant as the userconfig is no longer via path
+    //
     this->user_config_path = user_config_path;
     if (!fs::exists(this->user_config_path)) {
         EVLOG_critical << "User config file does not exist";
