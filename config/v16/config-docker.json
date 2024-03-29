@@ -40,7 +40,8 @@
     "Security": {
         "CpoName": "Pionix",
         "AuthorizationKey": "AABBCCDDEEFFGGHH",
-        "SecurityProfile": 1
+        "SecurityProfile": 1,
+        "DisableSecurityEventNotifications": true
     },
     "LocalAuthListManagement": {
         "LocalAuthListEnabled": true,
