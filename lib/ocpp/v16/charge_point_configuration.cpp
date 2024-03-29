@@ -15,16 +15,19 @@
 namespace ocpp {
 namespace v16 {
 
+//
+// Fro - It will likely have to be adapted as the user_config path is removed and might lea to unexpected behavior
+//
 ChargePointConfiguration::ChargePointConfiguration(const std::string& config, const fs::path& ocpp_main_path,
                                                    const fs::path& user_config_path) {
     //
-    // Fro - This part might be redundant as the userconfig is no longer via path
+    // Fro - This part is redundant as the userconfig is no longer via path and it would exit the program
     //
-    this->user_config_path = user_config_path;
-    if (!fs::exists(this->user_config_path)) {
-        EVLOG_critical << "User config file does not exist";
-        throw std::runtime_error("User config file does not exist");
-    }
+    //this->user_config_path = user_config_path;
+    //if (!fs::exists(this->user_config_path)) {
+    //    EVLOG_critical << "User config file does not exist";
+    //    throw std::runtime_error("User config file does not exist");
+    //}
 
     // validate config entries
     const auto schemas_path = ocpp_main_path / "profile_schemas";
@@ -190,6 +193,9 @@ json ChargePointConfiguration::get_user_config() {
     return json({}, true);
 }
 
+//
+// Fro - should be changed too, to avoid issues
+//
 void ChargePointConfiguration::setInUserConfig(std::string profile, std::string key, const json value) {
     json user_config = this->get_user_config();
     user_config[profile][key] = value;
