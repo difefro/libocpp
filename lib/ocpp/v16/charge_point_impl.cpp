@@ -3339,13 +3339,13 @@ void ChargePointImpl::stop_transaction(int32_t connector, Reason reason, std::op
     }
 
     //
-    // Fro - this is not in the specification i know and CSMS kicks CP
+    // Fro - this is was in the specification and we rectified that mistake in our CSMS
     //
     
-    //const auto transaction_data = this->get_filtered_transaction_data(transaction);
-    //if (!transaction_data.empty()) {
-    //    req.transactionData.emplace(transaction_data);
-    //}
+    const auto transaction_data = this->get_filtered_transaction_data(transaction);
+    if (!transaction_data.empty()) {
+        req.transactionData.emplace(transaction_data);
+    }
 
     auto message_id = this->message_queue->createMessageId();
     ocpp::Call<StopTransactionRequest> call(req, message_id);
