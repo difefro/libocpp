@@ -2,13 +2,13 @@
     "Internal": {
         "ChargePointId": "cp001",
         "CentralSystemURI": "127.0.0.1:8180/steve/websocket/CentralSystemService/",
-        "ChargeBoxSerialNumber": "101293879",   
+        "ChargeBoxSerialNumber": "101293879",
         "ChargePointModel": "cPH2 1T22",
         "ChargePointVendor": "eCharge Hardy Barth",
         "FirmwareVersion": "2.0.4",
         "AllowChargingProfileWithoutStartSchedule": true,
         "UseTPM" : false,
-        "LogMessagesFormat": ["html","security"],
+        "LogMessagesFormat": [],
         "VerifyCsmsCommonName": false
     },
     "Core": {
