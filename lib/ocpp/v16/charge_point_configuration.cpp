@@ -1,3 +1,13 @@
+///
+/// \file        charge_point_configuration.cpp
+/// \author      Felix Dilly
+/// \date        Created at: 2024-04-11
+/// \date        Last modified at: 2024-04-11
+/// ---
+/// \copyright   Copyright 2024 Fronius International GmbH.
+///              https://www.fronius.com
+///
+
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2020 - 2023 Pionix GmbH and Contributors to EVerest
 #include <fstream>
@@ -23,8 +33,8 @@ ChargePointConfiguration::ChargePointConfiguration(const std::string& config, co
     //
     // Fro - This part is redundant as the userconfig is no longer via path and it would exit the program
     //
-    //this->user_config_path = user_config_path;
-    //if (!fs::exists(this->user_config_path)) {
+    // this->user_config_path = user_config_path;
+    // if (!fs::exists(this->user_config_path)) {
     //    EVLOG_critical << "User config file does not exist";
     //    throw std::runtime_error("User config file does not exist");
     //}
@@ -102,13 +112,13 @@ ChargePointConfiguration::ChargePointConfiguration(const std::string& config, co
     }
 
     // TODO(kai): get this from config
-    this->supported_measurands = {{Measurand::Energy_Active_Import_Register, {Phase::L1, Phase::L2, Phase::L3}}, // Wh
-                                  {Measurand::Energy_Active_Export_Register, {Phase::L1, Phase::L2, Phase::L3}}, // Wh
-                                  {Measurand::Power_Active_Import, {Phase::L1, Phase::L2, Phase::L3}},           // W
-                                  {Measurand::Voltage, {Phase::L1, Phase::L2, Phase::L3}},                       // V
-                                  {Measurand::Current_Import, {Phase::L1, Phase::L2, Phase::L3, Phase::N}},      // A
-                                  {Measurand::Frequency, {Phase::L1, Phase::L2, Phase::L3}},                     // Hz
-                                  {Measurand::Current_Offered, {}}};                                             // A
+    this->supported_measurands = {{Measurand::Energy_Active_Import_Register, {}},                           // Wh
+                                  {Measurand::Energy_Active_Export_Register, {}},                           // Wh
+                                  {Measurand::Power_Active_Import, {Phase::L1, Phase::L2, Phase::L3}},      // W
+                                  {Measurand::Voltage, {Phase::L1, Phase::L2, Phase::L3}},                  // V
+                                  {Measurand::Current_Import, {Phase::L1, Phase::L2, Phase::L3, Phase::N}}, // A
+                                  {Measurand::Frequency, {Phase::L1, Phase::L2, Phase::L3}},                // Hz
+                                  {Measurand::Current_Offered, {}}};                                        // A
 
     if (!this->validate_measurands(this->config)) {
         EVLOG_AND_THROW(std::runtime_error("Given Measurands are invalid"));
