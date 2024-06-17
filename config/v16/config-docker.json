@@ -58,8 +58,5 @@
     "PnC": {
         "ISO15118PnCEnabled": true,
         "ContractValidationOffline": true
-    },
-    "Custom": {
-        "ExampleConfigurationKey": "example"
     }
 }
